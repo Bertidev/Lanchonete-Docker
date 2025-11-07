@@ -1,0 +1,64 @@
+services:
+  # 1. Serviço do Banco de Dados
+  db:
+    image: mysql:8.0
+    container_name: lanchonete-db
+    environment:
+      MYSQL_ROOT_PASSWORD: "rootpassword"
+      MYSQL_DATABASE: "lanchonete"
+      MYSQL_USER: "lanchonete"
+      MYSQL_PASSWORD: "123456"
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "lanchonete", "-p123456"]
+      interval: 10s  
+      timeout: 5s   
+      retries: 10    
+      start_period: 30s 
+
+  # 2. Serviço do Backend
+  backend:
+    container_name: lanchonete-backend
+    build:
+      context: ./backend
+    environment:
+      DB_HOST: "db"
+      DB_USER: "lanchonete"
+      DB_PASS: "123456"
+      DB_NAME: "lanchonete"
+      PORT: 4000
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      db:
+        condition: service_healthy 
+  # 3. Serviço do Frontend
+  frontend:
+    container_name: lanchonete-frontend
+    build:
+      context: ./frontend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+
+  # 4. Serviço do Proxy
+  proxy:
+    image: nginx:alpine
+    container_name: lanchonete-proxy
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/lanchonete.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      frontend:
+        condition: service_started
+      backend:
+        condition: service_started
+
+volumes:
+  db-data:

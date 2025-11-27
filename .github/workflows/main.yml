@@ -1,0 +1,68 @@
+name: CI/CD Lanchonete
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  # JOB 1: Testes Unitários
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout do código
+      uses: actions/checkout@v4
+
+    # Testes do Backend
+    - name: Setup Node.js (Backend)
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+    
+    - name: Install & Test Backend
+      working-directory: ./backend
+      run: |
+        npm install
+        npm test
+
+    # Testes do Frontend
+    - name: Install & Test Frontend
+      working-directory: ./frontend
+      run: |
+        npm install
+        npm test
+
+  # JOB 2: Testes de Integração (com Docker)
+  integration-tests:
+    needs: unit-tests # Só roda se os unitários passarem
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout do código
+      uses: actions/checkout@v4
+
+    - name: Subir Containers (Docker Compose)
+      run: |
+        docker compose up -d --build
+        
+    - name: Aguardar Inicialização (Healthchecks)
+      run: |
+        echo "Aguardando banco de dados ficar saudável..."
+        # Loop simples para esperar o container db reportar 'healthy'
+        timeout 60s sh -c 'until docker inspect --format="{{.State.Health.Status}}" lanchonete-db | grep -q "healthy"; do sleep 2; done'
+        
+        echo "Aguardando backend e frontend iniciarem..."
+        sleep 15 
+        
+        docker compose ps
+
+    - name: Executar Testes de Integração
+      run: |
+        # Roda o script de teste que criamos, apontando para o localhost do runner
+        # O runner consegue acessar as portas 8080 e 4000 mapeadas no docker-compose
+        node integration-tests/api.test.js
+
+    - name: Logs dos Containers (Em caso de falha)
+      if: failure()
+      run: docker compose logs

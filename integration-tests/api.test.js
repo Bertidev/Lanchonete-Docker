@@ -1,49 +1,69 @@
 // integration-tests/api.test.js
-// Este script usa o 'node' nativo para fazer requisições HTTP (fetch)
+// Versão melhorada com RETRY para aguardar o backend iniciar
 
 const BASE_URL = 'http://localhost:8080'; // Porta do Proxy Nginx
 
-console.log('⏳ Iniciando Testes de Integração...');
+console.log('⏳ Iniciando Testes de Integração com Retry...');
+
+// Função auxiliar para tentar conectar várias vezes antes de desistir
+async function fetchWithRetry(url, retries = 10, delay = 3000) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const res = await fetch(url);
+            // Se respondeu qualquer coisa que NÃO seja erro de Proxy (502/504), o backend tá vivo
+            if (res.status !== 502 && res.status !== 504 && res.status !== 503) {
+                return res;
+            }
+            console.log(`   ⚠️ Tentativa ${i + 1}/${retries}: Backend ainda indisponível (Status ${res.status})...`);
+        } catch (error) {
+            console.log(`   ⚠️ Tentativa ${i + 1}/${retries}: Erro de conexão (${error.cause || error.message})...`);
+        }
+        // Espera um pouco antes de tentar de novo
+        await new Promise(resolve => setTimeout(resolve, delay));
+    }
+    // Se esgotou as tentativas, retorna um objeto simulando erro para falhar o teste
+    return { status: 502, ok: false };
+}
 
 async function runTests() {
     let testesPassaram = 0;
-    let totalTestes = 3;
+    const totalTestes = 3;
 
     try {
-        // Teste de Integração 1: Verificar se o Frontend (Nginx) está respondendo
-        console.log('Teste 1: Verificando disponibilidade do Frontend...');
-        const resFront = await fetch(BASE_URL);
+        // Teste 1: Frontend (Nginx servindo estáticos)
+        console.log('\n🔍 Teste 1: Verificando Frontend...');
+        const resFront = await fetchWithRetry(BASE_URL);
         if (resFront.status === 200) {
-            console.log('✅ Teste 1 Passou: Frontend acessível.');
+            console.log('   ✅ Passou: Frontend acessível.');
             testesPassaram++;
         } else {
-            console.error(`❌ Teste 1 Falhou: Status ${resFront.status}`);
+            console.error(`   ❌ Falhou: Frontend retornou status ${resFront.status}`);
         }
 
-        // Teste de Integração 2: Verificar se a API Backend está respondendo (via Proxy)
-        // Ajuste a rota '/api/' conforme sua aplicação real
-        console.log('Teste 2: Verificando disponibilidade da API...');
-        const resApi = await fetch(`${BASE_URL}/api/`); 
-        // Aceita 200 (OK) ou 404 (Not Found mas respondeu) ou 401 (Unauthorized)
-        // O importante é que o Nginx repassou pro Node e o Node respondeu
+        // Teste 2: API Backend
+        console.log('\n🔍 Teste 2: Verificando API Backend...');
+        // Tenta conectar na rota /api/
+        const resApi = await fetchWithRetry(`${BASE_URL}/api/`); 
+        
         if (resApi.status !== 502 && resApi.status !== 504) {
-            console.log(`✅ Teste 2 Passou: API respondeu com status ${resApi.status}.`);
+            console.log(`   ✅ Passou: API respondeu (Status ${resApi.status}).`);
             testesPassaram++;
         } else {
-            console.error('❌ Teste 2 Falhou: Bad Gateway (Backend fora do ar?)');
+            console.error('   ❌ Falhou: Backend não respondeu após várias tentativas (Bad Gateway).');
         }
 
-        // Teste de Integração 3: Tentar acessar o banco indiretamente ou rota de saúde
-        // Se você não tiver uma rota específica, testamos apenas a conectividade básica novamente
-        console.log('Teste 3: Verificando resposta rápida (Latência)...');
+        // Teste 3: Latência (Performance simples)
+        console.log('\n🔍 Teste 3: Verificando Latência...');
         const inicio = Date.now();
         await fetch(BASE_URL);
         const fim = Date.now();
-        if ((fim - inicio) < 2000) {
-             console.log('✅ Teste 3 Passou: Resposta em menos de 2s.');
+        const duracao = fim - inicio;
+        
+        if (duracao < 2000) {
+             console.log(`   ✅ Passou: Resposta em ${duracao}ms.`);
              testesPassaram++;
         } else {
-             console.error('❌ Teste 3 Falhou: Sistema muito lento.');
+             console.error(`   ❌ Falhou: Lento demais (${duracao}ms).`);
         }
 
     } catch (error) {
@@ -51,14 +71,15 @@ async function runTests() {
         process.exit(1);
     }
 
+    console.log('\n------------------------------------------------');
     if (testesPassaram === totalTestes) {
-        console.log('🎉 Todos os testes de integração passaram!');
+        console.log(`🎉 SUCESSO: ${testesPassaram}/${totalTestes} testes passaram.`);
         process.exit(0);
     } else {
-        console.error('⚠️ Alguns testes falharam.');
+        console.error(`⚠️ FRACASSO: Apenas ${testesPassaram}/${totalTestes} testes passaram.`);
         process.exit(1);
     }
 }
 
-// Aguarda 5 segundos para garantir que tudo subiu e roda
-setTimeout(runTests, 5000);
+// Inicia os testes
+runTests();

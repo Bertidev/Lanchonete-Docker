@@ -2,9 +2,10 @@ name: CI/CD Lanchonete
 
 on:
   push:
-    branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main", "master" ]
+    # O '**' significa que vai rodar em QUALQUER branch que você subir
+    branches: [ "**" ]
+  # Adicionei esta opção para você poder clicar num botão "Run workflow" manualmente na aba Actions se precisar
+  workflow_dispatch: 
 
 jobs:
   # JOB 1: Testes Unitários
@@ -43,13 +44,13 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Subir Containers (Docker Compose)
+      # O --build garante que ele use o Dockerfile atualizado
       run: |
         docker compose up -d --build
         
     - name: Aguardar Inicialização (Healthchecks)
       run: |
         echo "Aguardando banco de dados ficar saudável..."
-        # Loop simples para esperar o container db reportar 'healthy'
         timeout 60s sh -c 'until docker inspect --format="{{.State.Health.Status}}" lanchonete-db | grep -q "healthy"; do sleep 2; done'
         
         echo "Aguardando backend e frontend iniciarem..."
@@ -59,8 +60,7 @@ jobs:
 
     - name: Executar Testes de Integração
       run: |
-        # Roda o script de teste que criamos, apontando para o localhost do runner
-        # O runner consegue acessar as portas 8080 e 4000 mapeadas no docker-compose
+        # Roda o script de teste apontando para o localhost
         node integration-tests/api.test.js
 
     - name: Logs dos Containers (Em caso de falha)

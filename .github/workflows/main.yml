@@ -1,0 +1,54 @@
+name: CI/CD Lanchonete
+
+on:
+  push:
+    branches: [ "**" ]
+  workflow_dispatch: 
+
+jobs:
+  # JOB 1: Testes Unitários (APENAS FRONTEND)
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout do código
+      uses: actions/checkout@v4
+
+    # Testes do Frontend (Roda os 4 testes que definimos acima)
+    - name: Install & Test Frontend
+      working-directory: ./frontend
+      run: |
+        npm install
+        npm test
+
+  # JOB 2: Testes de Integração (Docker Compose)
+  integration-tests:
+    needs: unit-tests # Só começa se o front passar
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout do código
+      uses: actions/checkout@v4
+
+    - name: Subir Containers (Docker Compose)
+      run: |
+        docker compose up -d --build
+        
+    - name: Aguardar Inicialização (Healthchecks)
+      run: |
+        echo "Aguardando banco de dados ficar saudável..."
+        # Loop aguardando o DB ficar 'healthy'
+        timeout 60s sh -c 'until docker inspect --format="{{.State.Health.Status}}" lanchonete-db | grep -q "healthy"; do sleep 2; done'
+        
+        echo "Aguardando backend e frontend iniciarem..."
+        sleep 10
+        
+        docker compose ps
+
+    - name: Executar Testes de Integração
+      run: |
+        # Roda o script de retry que criamos para bater na API
+        node integration-tests/api.test.js
+
+    - name: Logs dos Containers (Em caso de falha)
+      if: failure()
+      run: docker compose logs

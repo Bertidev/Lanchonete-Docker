@@ -6,23 +6,20 @@ on:
   workflow_dispatch: 
 
 jobs:
-  # JOB 1: Testes Unitários (APENAS FRONTEND)
   unit-tests:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout do código
       uses: actions/checkout@v4
 
-    # Testes do Frontend (Roda os 4 testes que definimos acima)
     - name: Install & Test Frontend
       working-directory: ./frontend
       run: |
         npm install
         npm test
 
-  # JOB 2: Testes de Integração (Docker Compose)
   integration-tests:
-    needs: unit-tests # Só começa se o front passar
+    needs: unit-tests
     runs-on: ubuntu-latest
     
     steps:

@@ -11,7 +11,7 @@ services:
     volumes:
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
       - db-data:/var/lib/mysql
-    # Healthcheck mantido, ajuda a segurar um pouco
+    # Healthcheck
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "lanchonete", "-p123456"]
       interval: 10s
@@ -19,15 +19,12 @@ services:
       retries: 10
       start_period: 30s
 
-  # 2. Serviço do Backend (AQUI ESTÁ A CORREÇÃO)
+  # 2. Serviço do Backend
   backend:
     container_name: lanchonete-backend
     build:
       context: ./backend
-    # ADICIONADO: Se cair (erro de banco), o Docker levanta de novo automaticamente
     restart: always 
-    # ADICIONADO: Sobrescreve o comando "npm run dev" para não usar o nodemon
-    # Isso garante que se der erro, o container reinicia em vez de travar esperando
     command: node server.js 
     environment:
       DB_HOST: "db"

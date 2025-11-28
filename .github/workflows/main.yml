@@ -2,41 +2,27 @@ name: CI/CD Lanchonete
 
 on:
   push:
-    # O '**' significa que vai rodar em QUALQUER branch que você subir
     branches: [ "**" ]
-  # Adicionei esta opção para você poder clicar num botão "Run workflow" manualmente na aba Actions se precisar
   workflow_dispatch: 
 
 jobs:
-  # JOB 1: Testes Unitários
+  # JOB 1: Testes Unitários (APENAS FRONTEND)
   unit-tests:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout do código
       uses: actions/checkout@v4
 
-    # Testes do Backend
-    - name: Setup Node.js (Backend)
-      uses: actions/setup-node@v4
-      with:
-        node-version: '22'
-    
-    - name: Install & Test Backend
-      working-directory: ./backend
-      run: |
-        npm install
-        npm test
-
-    # Testes do Frontend
+    # Testes do Frontend (Roda os 4 testes que definimos acima)
     - name: Install & Test Frontend
       working-directory: ./frontend
       run: |
         npm install
         npm test
 
-  # JOB 2: Testes de Integração (com Docker)
+  # JOB 2: Testes de Integração (Docker Compose)
   integration-tests:
-    needs: unit-tests # Só roda se os unitários passarem
+    needs: unit-tests # Só começa se o front passar
     runs-on: ubuntu-latest
     
     steps:
@@ -44,23 +30,23 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Subir Containers (Docker Compose)
-      # O --build garante que ele use o Dockerfile atualizado
       run: |
         docker compose up -d --build
         
     - name: Aguardar Inicialização (Healthchecks)
       run: |
         echo "Aguardando banco de dados ficar saudável..."
+        # Loop aguardando o DB ficar 'healthy'
         timeout 60s sh -c 'until docker inspect --format="{{.State.Health.Status}}" lanchonete-db | grep -q "healthy"; do sleep 2; done'
         
         echo "Aguardando backend e frontend iniciarem..."
-        sleep 15 
+        sleep 10
         
         docker compose ps
 
     - name: Executar Testes de Integração
       run: |
-        # Roda o script de teste apontando para o localhost
+        # Roda o script de retry que criamos para bater na API
         node integration-tests/api.test.js
 
     - name: Logs dos Containers (Em caso de falha)

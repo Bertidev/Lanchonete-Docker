@@ -2,15 +2,30 @@ name: CI/CD Lanchonete
 
 on:
   push:
+    # O '**' significa que vai rodar em QUALQUER branch que você subir
     branches: [ "**" ]
+  # Adicionei esta opção para você poder clicar num botão "Run workflow" manualmente na aba Actions se precisar
   workflow_dispatch: 
 
 jobs:
+  # JOB 1: Testes Unitários
   unit-tests:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout do código
       uses: actions/checkout@v4
+
+    # Testes do Backend
+    - name: Setup Node.js (Backend)
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+    
+    - name: Install & Test Backend
+      working-directory: ./backend
+      run: |
+        npm install
+        npm test
 
     # Testes do Frontend
     - name: Install & Test Frontend
@@ -19,6 +34,7 @@ jobs:
         npm install
         npm test
 
+  # JOB 2: Testes de Integração (com Docker)
   integration-tests:
     needs: unit-tests # Só roda se os unitários passarem
     runs-on: ubuntu-latest
